@@ -8,6 +8,9 @@ import android.content.Intent;
 import android.content.IntentSender;
 import android.content.SharedPreferences;
 import android.location.Location;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.os.AsyncTask;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -15,6 +18,7 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ShareActionProvider;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -26,6 +30,21 @@ import com.google.android.gms.location.LocationClient;
 import com.google.android.gms.location.LocationListener;
 import com.google.android.gms.location.LocationRequest;
 
+import org.apache.http.HttpResponse;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.message.BasicHeader;
+import org.apache.http.protocol.HTTP;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.URI;
+
 public class SendLocation extends ActionBarActivity implements
         GooglePlayServicesClient.ConnectionCallbacks,
         GooglePlayServicesClient.OnConnectionFailedListener,
@@ -33,27 +52,36 @@ public class SendLocation extends ActionBarActivity implements
 
     private final static int CONNECTION_FAILURE_RESOLUTION_REQUEST = 9000;
     private TextView TV_status;
-    private Button BTN_submit;
+    private Button BTN_get_locn, BTN_send_locn;
     private LocationClient mLocationClient;
-    // hold the current location
     private Location mCurrentLocation;
     private LocationRequest mLocationRequest;
-    private static final int UPDATE_INTERVAL = 5000; //ms
+    private static final int UPDATE_INTERVAL = 10000; //ms
     private boolean mUpdatesRequested;
     private SharedPreferences mPrefs;
-    p
+    private SharedPreferences.Editor mEditor;
+    private static final int myBusID = 123;
+    private static final String server = "10.5.22.234", port = "12345";
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_send_location);
         TV_status = (TextView) findViewById(R.id.TV_status);
         TV_status.setText("abhishek pant");
-        BTN_submit = (Button) findViewById(R.id.BTN_submit);
-        BTN_submit.setOnClickListener(new View.OnClickListener() {
+        BTN_get_locn = (Button) findViewById(R.id.BTN_get_locn);
+        BTN_get_locn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                dispLocation();
+                displayLocation();
            }
+        });
+        BTN_send_locn = (Button) findViewById(R.id.BTN_send_locn);
+        BTN_send_locn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                new SendLocnAsyncTask().execute();
+            }
         });
         // Open the shared preferences
         mPrefs = getSharedPreferences("SharedPreferences",
@@ -73,6 +101,8 @@ public class SendLocation extends ActionBarActivity implements
                 LocationRequest.PRIORITY_HIGH_ACCURACY);
         // Set the update interval to 5 seconds
         mLocationRequest.setInterval(UPDATE_INTERVAL);
+
+        mUpdatesRequested = true;
     }
 
     /*
@@ -85,14 +115,52 @@ public class SendLocation extends ActionBarActivity implements
         mLocationClient.connect();
     }
 
+    @Override
+    protected void onPause() {
+        // Save the current setting for updates
+        mEditor.putBoolean("KEY_UPDATES_ON", mUpdatesRequested);
+        mEditor.commit();
+        super.onPause();
+    }
+
     /*
      * Called when the Activity is no longer visible.
      */
     @Override
     protected void onStop() {
-        // Disconnecting the client invalidates it.
+        // If the client is connected
+        if (mLocationClient.isConnected()) {
+            /*
+             * Remove location updates for a listener.
+             * The current Activity is the listener, so
+             * the argument is "this".
+             */
+            mLocationClient.removeLocationUpdates(this);
+        }
+        /*
+         * After disconnect() is called, the client is
+         * considered "dead".
+         */
         mLocationClient.disconnect();
         super.onStop();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        /*
+         * Get any previous setting for location updates
+         * Gets "false" if an error occurs
+         */
+        if (mPrefs.contains("KEY_UPDATES_ON")) {
+            mUpdatesRequested =
+                    mPrefs.getBoolean("KEY_UPDATES_ON", false);
+
+            // Otherwise, turn off location updates
+        } else {
+            mEditor.putBoolean("KEY_UPDATES_ON", false);
+            mEditor.commit();
+        }
     }
 
     @Override
@@ -123,7 +191,11 @@ public class SendLocation extends ActionBarActivity implements
     @Override
     public void onConnected(Bundle dataBundle) {
         // Display the connection status
-        Toast.makeText(this, "Connected to locn svc", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "Connected to location service", Toast.LENGTH_SHORT).show();
+        // If already requested, start periodic updates
+        if (mUpdatesRequested) {
+            mLocationClient.requestLocationUpdates(mLocationRequest, this);
+        }
     }
 
     /*
@@ -263,14 +335,104 @@ public class SendLocation extends ActionBarActivity implements
         String msg = "Updated Location: " +
                 Double.toString(location.getLatitude()) + "," +
                 Double.toString(location.getLongitude());
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
     }
 
-    private void dispLocation(){
-        Toast.makeText(this, "getting new location",
-                Toast.LENGTH_SHORT).show();
+    private void displayLocation(){
         mCurrentLocation = mLocationClient.getLastLocation();
         TV_status.setText("Latitude : " + mCurrentLocation.getLatitude() + ", Longitude : " + mCurrentLocation.getLongitude());
     }
 
+    private String POSTLocation(){
+        Log.d("POSTLocation", "trying to post location");
+
+        if(!isConnected())
+        {
+            return "you are not connected to the network!";
+        }
+
+        InputStream inputStream = null;
+        String result = "";
+        try {
+
+            HttpClient httpclient = new DefaultHttpClient();
+            URI address = new URI("http", null, server, Integer.parseInt(port), null, null, null);
+            Log.d("POSTLocation", "URI : " + address);
+            HttpPost httpPost = new HttpPost(address);
+
+            String json = "";
+
+            JSONObject jsonObject = new JSONObject();
+            jsonObject.accumulate("type", "bus-data");
+            jsonObject.accumulate("bus-id", myBusID);
+            jsonObject.accumulate("bus-longitude", mCurrentLocation.getLongitude());
+            jsonObject.accumulate("bus-latitude", mCurrentLocation.getLatitude());
+            jsonObject.accumulate("landmark", "foomark");
+
+            json = jsonObject.toString();
+            Log.d("POSTLocation", "JSON : " + json);
+            StringEntity se = new StringEntity(json);
+            se.setContentType("application/json;charset=UTF-8");
+            se.setContentEncoding(new BasicHeader(HTTP.CONTENT_TYPE, "application/json;charset=UTF-8"));
+
+            httpPost.setEntity(se);
+
+            //httpPost.setHeader("Accept", "application/json");
+            httpPost.setHeader("Content-type", "application/json");
+            //httpPost.setHeader("Host", server+":"+port);
+
+            Log.d("POSTLocation", "made post object. about to send");
+
+            HttpResponse httpResponse = httpclient.execute(httpPost);
+
+            Log.d("POSTLocation", "send post request");
+
+            inputStream = httpResponse.getEntity().getContent();
+
+            Log.d("POSTLocation", "got response");
+
+            if(inputStream != null)
+                result = convertInputStreamToString(inputStream);
+            else
+                result = "what the heck. couldn't send data!";
+
+        } catch (Exception e) {
+            Log.d("InputStream", e.getLocalizedMessage());
+        }
+
+        return result;
+    }
+
+    public boolean isConnected(){
+        ConnectivityManager connMgr = (ConnectivityManager) getSystemService(Activity.CONNECTIVITY_SERVICE);
+        NetworkInfo networkInfo = connMgr.getActiveNetworkInfo();
+        if (networkInfo != null && networkInfo.isConnected())
+            return true;
+        else
+            return false;
+    }
+
+    private class SendLocnAsyncTask extends AsyncTask<String, Void, String> {
+        @Override
+        protected String doInBackground(String... str) {
+            return POSTLocation();
+        }
+        // onPostExecute displays the results of the AsyncTask.
+        @Override
+        protected void onPostExecute(String result) {
+            Toast.makeText(getBaseContext(), "done executing post locn. result : " + result, Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private static String convertInputStreamToString(InputStream inputStream) throws IOException {
+        BufferedReader bufferedReader = new BufferedReader( new InputStreamReader(inputStream));
+        String line = "";
+        String result = "";
+        while((line = bufferedReader.readLine()) != null)
+            result += line;
+
+        inputStream.close();
+        return result;
+
+    }
 }

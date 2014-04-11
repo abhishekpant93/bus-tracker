@@ -9,13 +9,21 @@
     tools:context="com.dbmslab.bustracker.app.SendLocation">
 
     <Button
-        android:id="@+id/BTN_submit"
+        android:id="@+id/BTN_get_locn"
         android:text="Get Location"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
         android:layout_centerHorizontal="true"
         android:layout_marginBottom="43dp" />
+
+    <Button
+        android:id="@+id/BTN_send_locn"
+        android:text="Send Location"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_centerHorizontal="true" />
 
     <TextView
         android:id="@+id/TV_status"
