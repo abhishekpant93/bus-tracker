@@ -43,7 +43,11 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.net.Socket;
 import java.net.URI;
+import java.util.Random;
 
 public class SendLocation extends ActionBarActivity implements
         GooglePlayServicesClient.ConnectionCallbacks,
@@ -56,12 +60,14 @@ public class SendLocation extends ActionBarActivity implements
     private LocationClient mLocationClient;
     private Location mCurrentLocation;
     private LocationRequest mLocationRequest;
-    private static final int UPDATE_INTERVAL = 10000; //ms
+    private static final int UPDATE_INTERVAL = 20000; //ms
     private boolean mUpdatesRequested;
     private SharedPreferences mPrefs;
     private SharedPreferences.Editor mEditor;
-    private static final int myBusID = 123;
-    private static final String server = "10.5.22.234", port = "12345";
+    private Random randomGenerator = new Random();
+    private final int myBusID = randomGenerator.nextInt(1000);
+    private static final String server = "10.109.53.12";
+    private static final int port = 12345;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -303,25 +309,6 @@ public class SendLocation extends ActionBarActivity implements
             return true;
             // Google Play services was not available for some reason
         } else {
-            /*// Get the error code
-            ConnectionResult cr = new ConnectionResult();
-            int errorCode = connectionResult.getErrorCode();
-            // Get the error dialog from Google Play services
-            Dialog errorDialog = GooglePlayServicesUtil.getErrorDialog(
-                    errorCode,
-                    this,
-                    CONNECTION_FAILURE_RESOLUTION_REQUEST);
-
-            // If Google Play services can provide an error dialog
-            if (errorDialog != null) {
-                // Create a new DialogFragment for the error dialog
-                ErrorDialogFragment errorFragment =
-                        new ErrorDialogFragment();
-                // Set the dialog in the DialogFragment
-                errorFragment.setDialog(errorDialog);
-                // Show the error dialog in the DialogFragment
-                errorFragment.show(getFragmentManager(),"Location Updates");
-            }*/
             Log.d("Location Updates",
                     "Google Play services is NOT available.");
         }
@@ -336,6 +323,8 @@ public class SendLocation extends ActionBarActivity implements
                 Double.toString(location.getLatitude()) + "," +
                 Double.toString(location.getLongitude());
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
+        mCurrentLocation = location;
+        TV_status.setText("Latitude : " + mCurrentLocation.getLatitude() + ", Longitude : " + mCurrentLocation.getLongitude());
     }
 
     private void displayLocation(){
@@ -343,23 +332,17 @@ public class SendLocation extends ActionBarActivity implements
         TV_status.setText("Latitude : " + mCurrentLocation.getLatitude() + ", Longitude : " + mCurrentLocation.getLongitude());
     }
 
-    private String POSTLocation(){
-        Log.d("POSTLocation", "trying to post location");
+    private String sendLocation(){
+        Log.d("POSTLocation", "trying to send location");
 
         if(!isConnected())
         {
             return "you are not connected to the network!";
         }
 
-        InputStream inputStream = null;
+        //InputStream inputStream = null;
         String result = "";
         try {
-
-            HttpClient httpclient = new DefaultHttpClient();
-            URI address = new URI("http", null, server, Integer.parseInt(port), null, null, null);
-            Log.d("POSTLocation", "URI : " + address);
-            HttpPost httpPost = new HttpPost(address);
-
             String json = "";
 
             JSONObject jsonObject = new JSONObject();
@@ -371,30 +354,14 @@ public class SendLocation extends ActionBarActivity implements
 
             json = jsonObject.toString();
             Log.d("POSTLocation", "JSON : " + json);
-            StringEntity se = new StringEntity(json);
-            se.setContentType("application/json;charset=UTF-8");
-            se.setContentEncoding(new BasicHeader(HTTP.CONTENT_TYPE, "application/json;charset=UTF-8"));
 
-            httpPost.setEntity(se);
-
-            //httpPost.setHeader("Accept", "application/json");
-            httpPost.setHeader("Content-type", "application/json");
-            //httpPost.setHeader("Host", server+":"+port);
-
-            Log.d("POSTLocation", "made post object. about to send");
-
-            HttpResponse httpResponse = httpclient.execute(httpPost);
-
-            Log.d("POSTLocation", "send post request");
-
-            inputStream = httpResponse.getEntity().getContent();
-
-            Log.d("POSTLocation", "got response");
-
-            if(inputStream != null)
-                result = convertInputStreamToString(inputStream);
-            else
-                result = "what the heck. couldn't send data!";
+            Socket socket = new Socket(server, port);
+            OutputStream out = socket.getOutputStream();
+            PrintWriter output = new PrintWriter(out);
+            output.println(json);
+            output.flush();
+            output.close();
+            socket.close();
 
         } catch (Exception e) {
             Log.d("InputStream", e.getLocalizedMessage());
@@ -415,7 +382,7 @@ public class SendLocation extends ActionBarActivity implements
     private class SendLocnAsyncTask extends AsyncTask<String, Void, String> {
         @Override
         protected String doInBackground(String... str) {
-            return POSTLocation();
+            return sendLocation();
         }
         // onPostExecute displays the results of the AsyncTask.
         @Override
