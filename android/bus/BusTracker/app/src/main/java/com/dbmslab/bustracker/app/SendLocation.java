@@ -8,6 +8,9 @@ import android.content.Intent;
 import android.content.IntentSender;
 import android.content.SharedPreferences;
 import android.location.Location;
+import android.location.Geocoder;
+import android.location.Location;
+import android.location.Address;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.AsyncTask;
@@ -47,26 +50,32 @@ import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.net.URI;
+import java.util.List;
+import java.util.Locale;
 import java.util.Random;
+import  java.lang.Object;
+import java.sql.*;
+import java.util.Timer;
+import java.util.TimerTask;
+
 
 public class SendLocation extends ActionBarActivity implements
         GooglePlayServicesClient.ConnectionCallbacks,
         GooglePlayServicesClient.OnConnectionFailedListener,
         LocationListener {
-
     private final static int CONNECTION_FAILURE_RESOLUTION_REQUEST = 9000;
     private TextView TV_status;
     private Button BTN_get_locn, BTN_send_locn;
     private LocationClient mLocationClient;
     private Location mCurrentLocation;
     private LocationRequest mLocationRequest;
-    private static final int UPDATE_INTERVAL = 20000; //ms
+    private static final int UPDATE_INTERVAL = 1000; //ms
     private boolean mUpdatesRequested;
     private SharedPreferences mPrefs;
     private SharedPreferences.Editor mEditor;
     private Random randomGenerator = new Random();
     private final int myBusID = randomGenerator.nextInt(1000);
-    private static final String server = "10.109.53.12";
+    private static final String server = "10.5.22.217";
     private static final int port = 12345;
 
     @Override
@@ -74,7 +83,7 @@ public class SendLocation extends ActionBarActivity implements
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_send_location);
         TV_status = (TextView) findViewById(R.id.TV_status);
-        TV_status.setText("abhishek pant");
+        TV_status.setText("BUS TRACKER");
         BTN_get_locn = (Button) findViewById(R.id.BTN_get_locn);
         BTN_get_locn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -89,6 +98,7 @@ public class SendLocation extends ActionBarActivity implements
                 new SendLocnAsyncTask().execute();
             }
         });
+
         // Open the shared preferences
         mPrefs = getSharedPreferences("SharedPreferences",
                 Context.MODE_PRIVATE);
@@ -324,49 +334,98 @@ public class SendLocation extends ActionBarActivity implements
                 Double.toString(location.getLongitude());
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
         mCurrentLocation = location;
-        TV_status.setText("Latitude : " + mCurrentLocation.getLatitude() + ", Longitude : " + mCurrentLocation.getLongitude());
+        Geocoder geocoder = new Geocoder(this, Locale.getDefault());
+        String results=null;
+        String result = "";
+        try{
+            List<Address> addresses = geocoder.getFromLocation(mCurrentLocation.getLatitude(), mCurrentLocation.getLongitude(), 1);
+            if (addresses != null && addresses.size() > 0) {
+                Address address = addresses.get(0);
+                // sending back first address line and locality
+                results = address.getAddressLine(0) + ", " + address.getLocality();
+            }
+        }
+        catch (IOException e)
+        {
+            Log.e("tag","Cannot Connect to Geocoder",e);
+        }finally {
+        TV_status.setText("Latitude  " + mCurrentLocation.getLatitude() + "\nLongitude " + mCurrentLocation.getLongitude() +"\n"+results);
+        }
     }
 
     private void displayLocation(){
+
         mCurrentLocation = mLocationClient.getLastLocation();
-        TV_status.setText("Latitude : " + mCurrentLocation.getLatitude() + ", Longitude : " + mCurrentLocation.getLongitude());
+        Geocoder geocoder = new Geocoder(this, Locale.getDefault());
+        String results=null;
+        String result = "";
+        try{
+            List<Address> addresses = geocoder.getFromLocation(mCurrentLocation.getLatitude(), mCurrentLocation.getLongitude(), 1);
+            if (addresses != null && addresses.size() > 0) {
+                Address address = addresses.get(0);
+                // sending back first address line and locality
+                results = address.getAddressLine(0) + ", " + address.getLocality();
+            }
+        }
+        catch (IOException e)
+        {
+            Log.e("tag","Cannot Connect to Geocoder",e);
+        }finally {
+        TV_status.setText("Latitude : " + mCurrentLocation.getLatitude() + ", Longitude : " + mCurrentLocation.getLongitude()
+                +", Landmark : "+results);
+        }
     }
 
     private String sendLocation(){
-        Log.d("POSTLocation", "trying to send location");
+        Geocoder geocoder = new Geocoder(this, Locale.getDefault());
+        String results=null;
+        String result = "";
+        try{
+            List<Address> addresses = geocoder.getFromLocation(mCurrentLocation.getLatitude(), mCurrentLocation.getLongitude(), 1);
+            if (addresses != null && addresses.size() > 0) {
+                Address address = addresses.get(0);
+                // sending back first address line and locality
+                results = address.getAddressLine(0) + ", " + address.getLocality();
+            }
+        }
+        catch (IOException e)
+        {
+            Log.e("tag","Cannot Connect to Geocoder",e);
+        }finally {
 
+
+        Log.d("POSTLocation", "trying to send location");
         if(!isConnected())
         {
             return "you are not connected to the network!";
         }
 
-        //InputStream inputStream = null;
-        String result = "";
-        try {
-            String json = "";
+            try {
+                String json = "";
 
-            JSONObject jsonObject = new JSONObject();
-            jsonObject.accumulate("type", "bus-data");
-            jsonObject.accumulate("bus-id", myBusID);
-            jsonObject.accumulate("bus-longitude", mCurrentLocation.getLongitude());
-            jsonObject.accumulate("bus-latitude", mCurrentLocation.getLatitude());
-            jsonObject.accumulate("landmark", "foomark");
+                JSONObject jsonObject = new JSONObject();
+                jsonObject.accumulate("type", "bus-data");
+                jsonObject.accumulate("bus-id", myBusID);
+                jsonObject.accumulate("bus-longitude", mCurrentLocation.getLongitude());
+                jsonObject.accumulate("bus-latitude", mCurrentLocation.getLatitude());
+                jsonObject.accumulate("landmark",results);
 
-            json = jsonObject.toString();
-            Log.d("POSTLocation", "JSON : " + json);
+                json = jsonObject.toString();
+                Log.d("POSTLocation", "JSON : " + json);
 
-            Socket socket = new Socket(server, port);
-            OutputStream out = socket.getOutputStream();
-            PrintWriter output = new PrintWriter(out);
-            output.println(json);
-            output.flush();
-            output.close();
-            socket.close();
+                Socket socket = new Socket(server, port);
+                OutputStream out = socket.getOutputStream();
+                PrintWriter output = new PrintWriter(out);
+                output.println(json);
+                output.flush();
+                output.close();
+                socket.close();
 
-        } catch (Exception e) {
-            Log.d("InputStream", e.getLocalizedMessage());
+            } catch (Exception e) {
+                Log.d("InputStream", e.getLocalizedMessage());
+            }
+
         }
-
         return result;
     }
 
@@ -381,6 +440,7 @@ public class SendLocation extends ActionBarActivity implements
 
     private class SendLocnAsyncTask extends AsyncTask<String, Void, String> {
         @Override
+
         protected String doInBackground(String... str) {
             return sendLocation();
         }
