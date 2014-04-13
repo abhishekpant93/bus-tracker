@@ -21,6 +21,7 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ShareActionProvider;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -65,7 +66,8 @@ public class SendLocation extends ActionBarActivity implements
 
     private final static int CONNECTION_FAILURE_RESOLUTION_REQUEST = 9000;
     private TextView TV_status;
-    private Button BTN_get_locn, BTN_send_locn;
+    private EditText ET_myBusID, ET_IP, ET_port;
+    private Button BTN_save;
     private LocationClient mLocationClient;
     private Location mCurrentLocation;
     private LocationRequest mLocationRequest;
@@ -74,9 +76,9 @@ public class SendLocation extends ActionBarActivity implements
     private SharedPreferences mPrefs;
     private SharedPreferences.Editor mEditor;
     private Random randomGenerator = new Random();
-    private final int myBusID = randomGenerator.nextInt(1000);
-    private static final String server = "10.109.53.17";
-    private static final int port = 12345;
+    private int myBusID = randomGenerator.nextInt(1000);
+    private String server; // = "10.109.53.17";
+    private int port;// = 12345;
     private Timer t;
 
     @Override
@@ -85,31 +87,37 @@ public class SendLocation extends ActionBarActivity implements
         setContentView(R.layout.activity_send_location);
         TV_status = (TextView) findViewById(R.id.TV_status);
         TV_status.setText("BUS TRACKER");
-        BTN_get_locn = (Button) findViewById(R.id.BTN_get_locn);
-        BTN_get_locn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                displayLocation();
-           }
-        });
-        BTN_get_locn.setEnabled(false);
-        BTN_send_locn = (Button) findViewById(R.id.BTN_send_locn);
-        BTN_send_locn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                new SendLocnAsyncTask().execute();
-            }
-        });
-        BTN_send_locn.setEnabled(false);
 
-        t = new Timer();
-        t.scheduleAtFixedRate(new TimerTask() {
+        mUpdatesRequested = true;
+
+        ET_myBusID = (EditText) findViewById(R.id.ET_busid);
+        ET_IP = (EditText) findViewById(R.id.ET_ip);
+        ET_port = (EditText) findViewById(R.id.ET_port);
+        BTN_save = (Button) findViewById(R.id.BTN_save);
+        BTN_save.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void run() {
-                Log.d("TimerTask", "Sending Location ...");
-                new SendLocnAsyncTask().execute();
+            public void onClick(View v) {
+                myBusID = Integer.parseInt(ET_myBusID.getText().toString());
+                server = ET_IP.getText().toString();
+                port = Integer.parseInt(ET_port.getText().toString());
+                BTN_save.setEnabled(false);
+
+                t = new Timer();
+                t.scheduleAtFixedRate(new TimerTask() {
+                    @Override
+                    public void run() {
+                        Log.d("TimerTask", "Sending Location ...");
+                        new SendLocnAsyncTask().execute();
+                    }
+                }, 1000, UPDATE_INTERVAL);
+
+                Log.d("BTN_save", "config info saved");
+                ET_IP.setEnabled(false);
+                ET_port.setEnabled(false);
+                ET_myBusID.setEnabled(false);
+
             }
-        }, 5000, UPDATE_INTERVAL);
+        });
 
         // Open the shared preferences
         mPrefs = getSharedPreferences("SharedPreferences",
@@ -128,8 +136,6 @@ public class SendLocation extends ActionBarActivity implements
         mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
 
         mLocationRequest.setInterval(UPDATE_INTERVAL);
-
-        mUpdatesRequested = true;
     }
 
     /*
