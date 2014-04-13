@@ -78,7 +78,7 @@ public class SendLocation extends ActionBarActivity implements
     private Random randomGenerator = new Random();
     private int myBusID = randomGenerator.nextInt(1000);
     private String server; // = "10.109.53.17";
-    private int port;// = 12345;
+    private int port = -1;// = 12345;
     private Timer t;
 
     @Override
@@ -175,7 +175,9 @@ public class SendLocation extends ActionBarActivity implements
          * considered "dead".
          */
         mLocationClient.disconnect();
-        t.cancel();
+        if(port!=-1)
+            t.cancel();
+        
         super.onStop();
     }
 
