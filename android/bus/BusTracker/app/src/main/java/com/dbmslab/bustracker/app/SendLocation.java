@@ -58,25 +58,26 @@ import java.sql.*;
 import java.util.Timer;
 import java.util.TimerTask;
 
-
 public class SendLocation extends ActionBarActivity implements
         GooglePlayServicesClient.ConnectionCallbacks,
         GooglePlayServicesClient.OnConnectionFailedListener,
         LocationListener {
+
     private final static int CONNECTION_FAILURE_RESOLUTION_REQUEST = 9000;
     private TextView TV_status;
     private Button BTN_get_locn, BTN_send_locn;
     private LocationClient mLocationClient;
     private Location mCurrentLocation;
     private LocationRequest mLocationRequest;
-    private static final int UPDATE_INTERVAL = 1000; //ms
+    private static final int UPDATE_INTERVAL = 15000; //ms
     private boolean mUpdatesRequested;
     private SharedPreferences mPrefs;
     private SharedPreferences.Editor mEditor;
     private Random randomGenerator = new Random();
     private final int myBusID = randomGenerator.nextInt(1000);
-    private static final String server = "10.5.22.217";
+    private static final String server = "10.109.53.17";
     private static final int port = 12345;
+    private Timer t;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -91,6 +92,7 @@ public class SendLocation extends ActionBarActivity implements
                 displayLocation();
            }
         });
+        BTN_get_locn.setEnabled(false);
         BTN_send_locn = (Button) findViewById(R.id.BTN_send_locn);
         BTN_send_locn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -98,6 +100,16 @@ public class SendLocation extends ActionBarActivity implements
                 new SendLocnAsyncTask().execute();
             }
         });
+        BTN_send_locn.setEnabled(false);
+
+        t = new Timer();
+        t.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                Log.d("TimerTask", "Sending Location ...");
+                new SendLocnAsyncTask().execute();
+            }
+        }, 5000, UPDATE_INTERVAL);
 
         // Open the shared preferences
         mPrefs = getSharedPreferences("SharedPreferences",
@@ -113,9 +125,8 @@ public class SendLocation extends ActionBarActivity implements
         // Create the LocationRequest object
         mLocationRequest = LocationRequest.create();
         // Use high accuracy
-        mLocationRequest.setPriority(
-                LocationRequest.PRIORITY_HIGH_ACCURACY);
-        // Set the update interval to 5 seconds
+        mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+
         mLocationRequest.setInterval(UPDATE_INTERVAL);
 
         mUpdatesRequested = true;
@@ -158,6 +169,7 @@ public class SendLocation extends ActionBarActivity implements
          * considered "dead".
          */
         mLocationClient.disconnect();
+        t.cancel();
         super.onStop();
     }
 
@@ -336,7 +348,6 @@ public class SendLocation extends ActionBarActivity implements
         mCurrentLocation = location;
         Geocoder geocoder = new Geocoder(this, Locale.getDefault());
         String results=null;
-        String result = "";
         try{
             List<Address> addresses = geocoder.getFromLocation(mCurrentLocation.getLatitude(), mCurrentLocation.getLongitude(), 1);
             if (addresses != null && addresses.size() > 0) {
@@ -358,7 +369,6 @@ public class SendLocation extends ActionBarActivity implements
         mCurrentLocation = mLocationClient.getLastLocation();
         Geocoder geocoder = new Geocoder(this, Locale.getDefault());
         String results=null;
-        String result = "";
         try{
             List<Address> addresses = geocoder.getFromLocation(mCurrentLocation.getLatitude(), mCurrentLocation.getLongitude(), 1);
             if (addresses != null && addresses.size() > 0) {
@@ -377,6 +387,7 @@ public class SendLocation extends ActionBarActivity implements
     }
 
     private String sendLocation(){
+        Log.d("POSTLocation", "sending location ...");
         Geocoder geocoder = new Geocoder(this, Locale.getDefault());
         String results=null;
         String result = "";
@@ -401,7 +412,7 @@ public class SendLocation extends ActionBarActivity implements
         }
 
             try {
-                String json = "";
+                String json;
 
                 JSONObject jsonObject = new JSONObject();
                 jsonObject.accumulate("type", "bus-data");
@@ -447,7 +458,7 @@ public class SendLocation extends ActionBarActivity implements
         // onPostExecute displays the results of the AsyncTask.
         @Override
         protected void onPostExecute(String result) {
-            Toast.makeText(getBaseContext(), "done executing post locn. result : " + result, Toast.LENGTH_LONG).show();
+            //Toast.makeText(getBaseContext(), "done executing post locn. result : " + result, Toast.LENGTH_LONG).show();
         }
     }
 
