@@ -9,13 +9,14 @@ class MyTCPServerHandler(SocketServer.BaseRequestHandler):
     def handle(self):
         try:
             inp = self.request.recv(1024).strip()
-            print inp
+            print 'inp : |',inp,'|'
+            # extract json
             p = re.compile('{.*}')
             data = json.loads(p.findall(inp)[0])
-            # process the data, i.e. print it:
-            print data
-            # send some 'ok' back
+            print 'json : ', data
+            print ''
             self.request.sendall(json.dumps({'return':'ok'}))
+            
         except Exception, e:
             print "Exception while receiving message: ", e
 
